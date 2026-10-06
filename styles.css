@@ -1,0 +1,48 @@
+:root {
+  --ink: #f4efe6;
+  --muted: #b7aa98;
+  --bg: #1a1612;
+  --panel: #241e18;
+  --line: #3a3128;
+  --hit: #e8b86d;
+  --hole: #6e8f7a;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: "Iowan Old Style", Palatino, Georgia, serif;
+  background: var(--bg);
+  color: var(--ink);
+  padding: 24px 20px 48px;
+}
+header { display: flex; justify-content: space-between; gap: 16px; align-items: flex-end; }
+h1 { margin: 0; font-weight: 500; letter-spacing: -0.03em; }
+.mark, .lede, .note, .blurb { color: var(--muted); }
+.lede { max-width: 42rem; }
+.status { border: 1px solid var(--line); padding: 8px 12px; border-radius: 999px; }
+.panel { display: flex; flex-wrap: wrap; gap: 10px; margin: 16px 0; }
+label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+.grow { flex: 1; min-width: 180px; }
+input, select, button {
+  font: inherit;
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+button { cursor: pointer; }
+button.on, .bar.now { border-color: var(--hit); color: var(--hit); }
+.bar.hole { background: #1c2822; }
+.bar.hit { background: #2a2218; }
+.bars { display: grid; gap: 8px; }
+.bar { border: 1px solid var(--line); border-radius: 8px; padding: 10px; min-height: 64px; }
+.bar b { display: block; }
+.punch {
+  white-space: pre-wrap;
+  background: var(--panel);
+  border-radius: 8px;
+  padding: 12px;
+  color: var(--muted);
+}
+button.muted { opacity: 0.45; text-decoration: line-through; }

@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>HoleFour — four-bar stop-time desk</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header>
+    <div>
+      <p class="mark">WorkinWithAI · finish the turnaround</p>
+      <h1>HoleFour</h1>
+      <p class="lede">Four bars of written stop-time. Suno and loop DAWs keep the pattern running. A band hits, leaves a hole, and answers. Then the next section starts on 1.</p>
+    </div>
+    <p id="status" class="status">Tap to start audio</p>
+  </header>
+
+  <section class="panel user">
+    <label>BPM <input id="bpm" type="number" min="60" max="180" value="92" /></label>
+    <label>Key
+      <select id="key">
+        <option>A minor</option>
+        <option>C major</option>
+        <option>D minor</option>
+        <option>E minor</option>
+        <option>G major</option>
+        <option>F major</option>
+        <option>Bb major</option>
+      </select>
+    </label>
+    <label class="grow">Chords <input id="chords" type="text" value="Am F C G" /></label>
+    <label>Bars <input id="bars" type="number" min="4" max="8" value="4" /></label>
+  </section>
+
+  <section class="panel sides">
+    <button type="button" id="sideA" class="side">A · print</button>
+    <button type="button" id="sideB" class="side on">B · stop</button>
+    <div id="recipes" class="recipes"></div>
+  </section>
+
+  <section class="panel chairs">
+    <button type="button" data-chair="piano">Piano</button>
+    <button type="button" data-chair="bass">Upright bass</button>
+    <button type="button" data-chair="nylon">Nylon guitar</button>
+    <button type="button" data-chair="trumpet">Trumpet</button>
+    <button type="button" data-chair="kit">Acoustic kit</button>
+  </section>
+
+  <div id="barsView" class="bars"></div>
+  <p id="blurb" class="blurb"></p>
+
+  <section class="panel transport">
+    <button type="button" id="play">Play</button>
+    <button type="button" id="stop">Stop</button>
+    <button type="button" id="wav">Export loop WAV</button>
+    <button type="button" id="tail">With tail</button>
+    <button type="button" id="mid">Export MIDI</button>
+  </section>
+
+  <pre id="punch" class="punch"></pre>
+  <p class="note">iOS silent switch mutes Web Audio. Audio stays in the tab. This desk is free. List it once at $29 on Lemon Squeezy if you sell it — do not subscribe it.</p>
+  <script src="app.js"></script>
+</body>
+</html>
