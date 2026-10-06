@@ -197,6 +197,11 @@ function track(node, audioCtx) {
   node.onended = () => { active = active.filter((n) => n !== node); };
 }
 
+function sideScale(local) {
+  // A is a full print (hats + chords). B is a written stop. Match loudness so the comparison is the parts.
+  return local && local.side === "A" ? 0.58 : 1;
+}
+
 function playNote(audioCtx, when, ev, dest, bag) {
   if (ev.chair === "kit") {
     const map = { 36: "kit:kick", 38: "kit:snare", 42: "kit:hat" };
@@ -205,8 +210,10 @@ function playNote(audioCtx, when, ev, dest, bag) {
     const src = audioCtx.createBufferSource();
     src.buffer = buf;
     const g = audioCtx.createGain();
-    g.gain.setValueAtTime(Math.max(0.04, ev.gain), when);
+    const peak = Math.max(0.04, ev.gain) * (ev.scale || 1);
+    g.gain.setValueAtTime(peak, when);
     const rel = Math.max(0.05, Math.min(ev.dur, 0.35));
+    g.gain.setValueAtTime(peak, when + Math.max(0.01, rel - 0.012));
     g.gain.linearRampToValueAtTime(0.0001, when + rel);
     src.connect(g);
     g.connect(dest);
@@ -228,8 +235,8 @@ function playNote(audioCtx, when, ev, dest, bag) {
     src.buffer = buf;
     src.playbackRate.setValueAtTime(pick.rate, t);
     const g = audioCtx.createGain();
-    const attack = 0.012;
-    const peak = ev.gain;
+    const attack = 0.008;
+    const peak = ev.gain * (ev.scale || 1);
     g.gain.setValueAtTime(0.0001, t);
     g.gain.linearRampToValueAtTime(peak, t + attack);
     const end = Math.min(when + hold, t + slice);
@@ -255,8 +262,9 @@ function scheduleStep(stepIndex, when) {
     chords: state.chords,
     key: state.key
   };
+  const scale = sideScale(local);
   eventsFor(local).forEach((e) => {
-    if (e.step === s) playNote(ctx, when, e, chairGain[e.chair], buffers);
+    if (e.step === s) playNote(ctx, when, Object.assign({}, e, { scale }), chairGain[e.chair], buffers);
   });
 }
 
@@ -307,25 +315,39 @@ function start() {
   raf = requestAnimationFrame(loop);
 }
 
-function wireBus(audioCtx, dest) {
-  const comp = audioCtx.createDynamicsCompressor();
-  comp.threshold.value = -8;
-  comp.knee.value = 6;
-  comp.ratio.value = 12;
-  comp.attack.value = 0.003;
-  comp.release.value = 0.12;
+function wireBus(audioCtx, dest, live) {
   const out = audioCtx.createGain();
   out.gain.value = 0.72;
-  comp.connect(out);
   out.connect(dest);
+  let bus = out;
+  if (live) {
+    const comp = audioCtx.createDynamicsCompressor();
+    comp.threshold.value = -8;
+    comp.knee.value = 6;
+    comp.ratio.value = 12;
+    comp.attack.value = 0.003;
+    comp.release.value = 0.12;
+    comp.connect(out);
+    bus = comp;
+  }
   const gains = {};
   CHAIRS.forEach((c) => {
     const g = audioCtx.createGain();
     g.gain.value = 0.9;
-    g.connect(comp);
+    g.connect(bus);
     gains[c] = g;
   });
   return gains;
+}
+
+function trimHit(audioCtx, buf) {
+  const ch = buf.getChannelData(0);
+  let i = 0;
+  while (i < ch.length - 64 && Math.abs(ch[i]) < 0.02) i++;
+  if (i < 8) return buf;
+  const out = audioCtx.createBuffer(buf.numberOfChannels, buf.length - i, buf.sampleRate);
+  for (let c = 0; c < buf.numberOfChannels; c++) out.getChannelData(c).set(buf.getChannelData(c).subarray(i));
+  return out;
 }
 
 function sampleUrl(chair, note) {
@@ -338,7 +360,7 @@ function sampleUrl(chair, note) {
 async function ensureCtx() {
   if (!ctx) {
     ctx = new AudioContext();
-    chairGain = wireBus(ctx, ctx.destination);
+    chairGain = wireBus(ctx, ctx.destination, true);
     await loadSamples();
   }
   if (ctx.state === "suspended") await ctx.resume();
@@ -359,11 +381,13 @@ async function loadSamples() {
   let done = 0;
   for (const [key, chair, url] of files) {
     try {
-      const r = await fetch(url);
+      const r = await fetch(url, { signal: AbortSignal.timeout(12000) });
       if (!r.ok) throw new Error(String(r.status));
       const ab = await r.arrayBuffer();
       raw[key] = ab;
-      buffers[key] = await ctx.decodeAudioData(ab.slice(0));
+      let decoded = await ctx.decodeAudioData(ab.slice(0));
+      if (key.indexOf("kit:") === 0) decoded = trimHit(ctx, decoded);
+      buffers[key] = decoded;
     } catch (e) {
       missing.push(chair + " (" + key + ")");
     }
@@ -470,9 +494,13 @@ async function exportWav(withTail) {
   const length = Math.round(bars * 4 * 60 / state.bpm * SR);
   const tailSec = 1.2;
   const offline = new OfflineAudioContext(2, length + Math.round(tailSec * SR), SR);
-  const gains = wireBus(offline, offline.destination);
+  const gains = wireBus(offline, offline.destination, false);
   const decoded = {};
-  for (const k of Object.keys(raw)) decoded[k] = await offline.decodeAudioData(raw[k].slice(0));
+  for (const k of Object.keys(raw)) {
+    let d = await offline.decodeAudioData(raw[k].slice(0));
+    if (k.indexOf("kit:") === 0) d = trimHit(offline, d);
+    decoded[k] = d;
+  }
   const local = {
     bpm: state.bpm,
     side: state.side,
@@ -484,7 +512,8 @@ async function exportWav(withTail) {
   };
   const saved = active;
   active = [];
-  eventsFor(local).forEach((e) => playNote(offline, e.time, e, gains[e.chair], decoded));
+  const scale = sideScale(local);
+  eventsFor(local).forEach((e) => playNote(offline, e.time, Object.assign({}, e, { scale }), gains[e.chair], decoded));
   active = saved;
   const rendered = await offline.startRendering();
   const l = rendered.getChannelData(0);
@@ -504,8 +533,17 @@ async function exportWav(withTail) {
   const target = Math.pow(10, -1 / 20);
   const g = peak > target ? target / peak : 1;
   for (let i = 0; i < n; i++) { loopL[i] *= g; loopR[i] *= g; }
+  let first = -1;
+  const thresh = 0.001;
+  for (let i = 0; i < n; i++) {
+    if (Math.abs(loopL[i]) >= thresh || Math.abs(loopR[i]) >= thresh) { first = i; break; }
+  }
+  const at1ms = Math.max(Math.abs(loopL[48] || 0), Math.abs(loopR[48] || 0));
+  const seam = Math.abs(loopL[0] - loopL[n - 1]) + Math.abs(loopR[0] - loopR[n - 1]);
+  window.__holeLastExport = { samples: n, expected: length, firstSample: first, ampAt1ms: at1ms, seamDelta: seam, peak: peak * g, bpm: state.bpm, bars };
+  if (window.__holeProbe) return window.__holeLastExport;
   const written = encodeWav(loopL, loopR, withTail);
-  $("status").textContent = "WAV " + written + " samples · expected " + length + (withTail ? " plus tail" : "");
+  $("status").textContent = "WAV " + written + " samples · expected " + length + (withTail ? " plus tail" : "") + " · first transient sample " + first;
 }
 
 function vlq(n) {
@@ -532,6 +570,9 @@ function exportMidi() {
   };
   const evs = eventsFor(local);
   const ppq = 480;
+  const tempo = Math.round(60000000 / local.bpm);
+  const tempoBytes = [0xFF, 0x51, 0x03, (tempo >> 16) & 255, (tempo >> 8) & 255, tempo & 255];
+  const sigBytes = [0xFF, 0x58, 0x04, 4, 2, 24, 8];
   const tracks = CHAIRS.map((chair) => {
     const notes = evs.filter((e) => e.chair === chair).map((e) => {
       const midi = e.chair === "kit" ? e.midi : nearest(e.chair, e.midi).midi;
@@ -539,7 +580,12 @@ function exportMidi() {
       const dur = Math.max(1, Math.round(e.dur / (60 / local.bpm) * ppq));
       return { start, dur, midi, vel: Math.max(1, Math.min(127, Math.round(e.gain * 280))) };
     }).sort((a, b) => a.start - b.start);
-    const events = [{ t: 0, b: [0xFF, 0x03].concat([chair.length], Array.from(chair).map((c) => c.charCodeAt(0))) }];
+    const name = chair;
+    const events = [
+      { t: 0, b: tempoBytes.slice() },
+      { t: 0, b: sigBytes.slice() },
+      { t: 0, b: [0xFF, 0x03].concat([name.length], Array.from(name).map((c) => c.charCodeAt(0))) }
+    ];
     notes.forEach((n) => {
       events.push({ t: n.start, b: [0x90, n.midi, n.vel] });
       events.push({ t: n.start + n.dur, b: [0x80, n.midi, 0] });
@@ -557,9 +603,7 @@ function exportMidi() {
     return bytes;
   });
   const header = [0x4d, 0x54, 0x68, 0x64, 0, 0, 0, 6, 0, 1, 0, tracks.length, (ppq >> 8) & 255, ppq & 255];
-  const tempo = Math.round(60000000 / local.bpm);
-  const meta = [0x00, 0xFF, 0x51, 0x03, (tempo >> 16) & 255, (tempo >> 8) & 255, tempo & 255, 0x00, 0xFF, 0x58, 0x04, 4, 2, 24, 8, 0x00, 0xFF, 0x2F, 0x00];
-  const chunks = [meta].concat(tracks).map((bytes) => {
+  const chunks = tracks.map((bytes) => {
     const out = [0x4d, 0x54, 0x72, 0x6b, (bytes.length >> 24) & 255, (bytes.length >> 16) & 255, (bytes.length >> 8) & 255, bytes.length & 255];
     return out.concat(bytes);
   });
@@ -628,7 +672,10 @@ function bind() {
   $("tail").addEventListener("click", () => exportWav(true));
   $("mid").addEventListener("click", exportMidi);
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "hidden") stopAll();
+    if (document.visibilityState === "hidden") {
+      stopAll();
+      $("status").textContent = "Stopped · tab was hidden. Tap Play. Clock was not resumed.";
+    }
   });
 }
 
@@ -645,7 +692,17 @@ function boot() {
   paintBars();
   punch();
   bind();
-  $("status").textContent = "Tap Play to start audio";
+  const gate = $("gate");
+  gate.addEventListener("click", async () => {
+    await ensureCtx();
+    if (missing.length) {
+      gate.textContent = $("status").textContent;
+      return;
+    }
+    gate.hidden = true;
+    $("status").textContent = "Audio running · iOS silent switch mutes Web Audio";
+  });
+  $("status").textContent = "Tap to start audio";
 }
 
 boot();

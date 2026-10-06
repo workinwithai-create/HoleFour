@@ -46,3 +46,22 @@ button.on, .bar.now { border-color: var(--hit); color: var(--hit); }
   color: var(--muted);
 }
 button.muted { opacity: 0.45; text-decoration: line-through; }
+
+.gate {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: rgba(26, 22, 18, 0.94);
+  color: var(--hit);
+  font-size: 1.4rem;
+  min-height: 100dvh;
+}
+.gate[hidden] { display: none; }
+@media (max-width: 720px) {
+  body { padding: 16px 12px 96px; }
+  header { flex-direction: column; align-items: flex-start; }
+  .transport button, .gate { min-height: 48px; }
+}

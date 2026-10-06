@@ -37,9 +37,11 @@ Yesterday's ship was PedalEight (a held pedal under moving chords). HoleFour is 
 
 ## Pricing
 
-The shipped desk is free.
+Free. No license key and no checkout — do not treat a $29 idea as a price. If it is sold later, wire Lemon Squeezy first and change this line. Forge Pass stays the subscription for AuraMix / MixForge.
 
-Recommended list price if you sell it: one-time **$29** on Lemon Squeezy (merchant of record). Mirror on Gumroad. Do not subscribe it. Forge Pass stays the subscription for AuraMix / MixForge.
+## Export check
+
+Loop WAV at 92 BPM, 8 bars, 48 kHz is 1,001,739 samples. The kick transient is at sample 0. The live bus uses a compressor; the bounce does not, because the browser compressor delays the downbeat by about 6 ms. Peak is limited to -1 dBFS in the file. MIDI writes tempo and 4/4 on every chair track.
 
 ## License
 
